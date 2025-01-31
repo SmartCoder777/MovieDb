@@ -3,6 +3,11 @@ from pyrogram import Client, filters
 import logging
 import time
 import os
+from config import config
+
+app = Client("movie_bot", api_id=config["api_id"], api_hash=config["api_hash"], bot_token=config["bot_token"])
+
+TMDB_API_KEY = config["tmdb_api_key"]
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
