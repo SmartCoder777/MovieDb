@@ -2,25 +2,18 @@ import requests
 from pyrogram import Client, filters
 import logging
 import time
-import os
-from config import config
-import subprocess
-
-app = Client("movie_bot", api_id=config["api_id"], api_hash=config["api_hash"], bot_token=config["bot_token"])
-
-TMDB_API_KEY = config["tmdb_api_key"]
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Bot Credentials from Environment Variables
-API_ID = os.getenv("API_ID")
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Bot Credentials
+API_ID = "29754529"
+API_HASH = "dd54732e78650479ac4fb0e173fe4759"
+BOT_TOKEN = "7932482559:AAFcTZeRpZledQaaM66FHJi9JuhdDCJ4uL4"
 
 # TMDB API Credentials
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+TMDB_API_KEY = "1eacddf9bc17e39d80e6144ab49cad71"
 
 app = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -95,6 +88,4 @@ async def send_movie_link(client, message):
         await message.reply_text("Sorry, I couldn't find that movie. 😔")
 
 if __name__ == "__main__":
-    # Sync time before starting the bot
-    subprocess.run(["ntpd", "-gq"])
     app.run()
