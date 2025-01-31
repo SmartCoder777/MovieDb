@@ -2,18 +2,19 @@ import requests
 from pyrogram import Client, filters
 import logging
 import time
+import os
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Bot Credentials
-API_ID = "29754529"
-API_HASH = "dd54732e78650479ac4fb0e173fe4759"
-BOT_TOKEN = "7932482559:AAFcTZeRpZledQaaM66FHJi9JuhdDCJ4uL4"
+# Bot Credentials from Environment Variables
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # TMDB API Credentials
-TMDB_API_KEY = "1eacddf9bc17e39d80e6144ab49cad71"
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
 app = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
