@@ -1,11 +1,8 @@
 # Use the official Python image from the Docker Hub
 FROM python:3.12
 
-# Install chrony to sync time
-RUN apt-get update && apt-get install -y chrony
-
-# Copy the configuration file for chrony
-COPY chrony.conf /etc/chrony/chrony.conf
+# Install ntpd to sync time
+RUN apt-get update && apt-get install -y ntp
 
 # Set the working directory in the container
 WORKDIR /app
@@ -23,5 +20,5 @@ COPY . .
 # Expose the port that the app runs on
 EXPOSE 8000
 
-# Start chronyd and run the application
-CMD ["sh", "-c", "chronyd && gunicorn app:app & python3 bot.py"]
+# Start ntpd and run the application
+CMD ["sh", "-c", "service ntp start && gunicorn app:app & python3 bot.py"]
