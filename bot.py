@@ -4,6 +4,7 @@ import logging
 import time
 import os
 from config import config
+import subprocess
 
 app = Client("movie_bot", api_id=config["api_id"], api_hash=config["api_hash"], bot_token=config["bot_token"])
 
@@ -94,4 +95,6 @@ async def send_movie_link(client, message):
         await message.reply_text("Sorry, I couldn't find that movie. 😔")
 
 if __name__ == "__main__":
+    # Sync time before starting the bot
+    subprocess.run(["ntpd", "-gq"])
     app.run()
