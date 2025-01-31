@@ -1,6 +1,12 @@
 # Use the official Python image from the Docker Hub
 FROM python:3.12
 
+# Install chrony to sync time
+RUN apt-get update && apt-get install -y chrony
+
+# Copy the configuration file for chrony
+COPY chrony.conf /etc/chrony/chrony.conf
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -17,5 +23,5 @@ COPY . .
 # Expose the port that the app runs on
 EXPOSE 8000
 
-# Run the command to start the application
-CMD ["sh", "-c", "gunicorn app:app & python3 bot.py"]
+# Start chronyd and run the application
+CMD ["sh", "-c", "chronyd && gunicorn app:app & python3 bot.py"]
