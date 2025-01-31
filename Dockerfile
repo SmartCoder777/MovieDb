@@ -1,11 +1,24 @@
 # Use the official Python image from the Docker Hub
 FROM python:3.12
 
-# Install ntpdate to sync time
-RUN apt-get update && apt-get install -y ntpdate
+# Install dbus and systemd to use timedatectl
+RUN apt-get update && apt-get install -y dbus systemd
 
-# Synchronize the container's time with an NTP server
-RUN ntpdate -u pool.ntp.org
+# Enable systemd service in Docker
+ENV container docker
+RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+    rm -f /lib/systemd/system/multi-user.target.wants/*; \
+    rm -f /etc/systemd/system/*.wants/*; \
+    rm -f /lib/systemd/system/local-fs.target.wants/*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+    rm -f /lib/systemd/system/basic.target.wants/*; \
+    rm -f /lib/systemd/system/anaconda.target.wants/*; \
+    rm -f /lib/systemd/system/plymouth*; \
+    rm -f /lib/systemd/system/systemd-update-utmp*
+
+# Set the time within the container
+RUN systemctl set-ntp true
 
 # Set the working directory in the container
 WORKDIR /app
