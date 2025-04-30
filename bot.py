@@ -85,7 +85,8 @@ async def list_movie_options(client, message):
     await message.reply_text(text)
 
 
-@app.on_message(filters.text & ~filters.command)
+# Use regex to exclude any command (i.e., lines starting with '/')
+@app.on_message(filters.text & ~filters.regex(r'^/'))
 async def handle_selection(client, message):
     """Handles numeric selection to send the chosen movie poster."""
     data = movie_options.get(message.chat.id)
