@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Bot Credentials
 API_ID = "29754529"
 API_HASH = "dd54732e78650479ac4fb0e173fe4759"
-BOT_TOKEN = "7932482559:AAFcTZeRpZledQaaM66FHJi9JuhdDCJ4uL4"
+BOT_TOKEN = "7814806767:AAEbx6EcJb_PHyGJdjqixZCks_dSJm6WSJY"
 
 # TMDB API Credentials
 TMDB_API_KEY = "1eacddf9bc17e39d80e6144ab49cad71"
