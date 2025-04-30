@@ -1,4 +1,6 @@
 requests==2.26.0
+beautifulsoup4>=4.11.1
+lxml>=4.9.0           # optional, speeds up BS4
 pyrogram==2.0.106
 python-dotenv==0.21.0
 tgcrypto==1.2.3
