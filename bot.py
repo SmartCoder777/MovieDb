@@ -139,7 +139,6 @@ async def movielink_handler(client, message):
         return await message.reply_text("Usage: `/movielink <movie name> <link>`")
     movie_name = " ".join(message.command[1:-1])
     link = message.command[-1]
-    # Reuse earlier fetch logic: search TMDb for releases >=2021
     url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={movie_name}"
     resp = requests.get(url, timeout=10).json()
     options = []
@@ -170,16 +169,21 @@ async def handle_selection(client, message):
     if choice < 1 or choice > len(opts):
         return await message.reply_text("Invalid choice. Reply with a valid number.")
     m = opts[choice-1]
-    caption = (
-        f"**{m['title']}** **Latest Movie** **{m['date']}**\n\n"
-        f"LOGIN & WATCH FULL VIDEOS\n━━━━━━━━━━━━━━━━━━━\n"
-        f"📥 Download Links / 👀 Watch Online\n\n"
-        f"480p {link}\n"
-        f"720p {link}\n"
-        f"1080p {link}\n\n"
-        f"Join @ORGPrime"
-    )
-    await client.send_photo(message.chat.id, m['poster_url'], caption=caption)
+    poster_url = m.get('poster_url')
+    if poster_url:
+        caption = (
+            f"**{m['title']}** **Latest Movie** **{m['date']}**\n\n"
+            f"LOGIN & WATCH FULL VIDEOS\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"📥 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐋𝐢𝐧𝐤𝐬/👀𝐖𝐚𝐭𝐜𝐡 𝐎𝐧𝐥𝐢𝐧𝐞\n\n"
+            f"HINDI ENGLISH TAMIL TELUGU\n\n"
+            f"480p\n\n{link}\n\n"
+            f"720p\n\n{link}\n\n"
+            f"1080p\n\n{link}\n"
+            f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+            f"Join @ORGPrime"
+        )
+        await client.send_photo(message.chat.id, poster_url, caption=caption)
     movie_options.pop(message.chat.id, None)
 
 
