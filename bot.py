@@ -21,10 +21,8 @@ app = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 movie_options = {}
 
 
-def discover_latest_movies(days, include_upcoming=False):
-    """Discover Hindi-language titles released in India within the last `days` days."""
-    today = datetime.utcnow().date()
-    start_date = today - timedelta(days=days)
+def discover_movies_window(start_date, end_date):
+    """Discover Hindi titles released in India between start_date and end_date."""
     endpoint = "https://api.themoviedb.org/3/discover/movie"
     params = {
         "api_key": TMDB_API_KEY,
@@ -32,89 +30,102 @@ def discover_latest_movies(days, include_upcoming=False):
         "region": "IN",
         "sort_by": "primary_release_date.desc",
         "primary_release_date.gte": start_date.isoformat(),
-        "primary_release_date.lte": today.isoformat(),
+        "primary_release_date.lte": end_date.isoformat(),
         "page": 1
     }
-    if include_upcoming:
-        params["include_adult"] = False
-        params["include_video"] = True
-
     results = []
     try:
         while True:
             resp = requests.get(endpoint, params=params, timeout=10)
             resp.raise_for_status()
             data = resp.json()
-            for movie in data.get("results", []):
+            for m in data.get("results", []):
                 results.append({
-                    "title": movie.get("title"),
-                    "date": movie.get("release_date"),
-                    "poster_url": f"https://image.tmdb.org/t/p/w500{movie.get('poster_path')}" if movie.get('poster_path') else None
+                    "title": m.get("title"),
+                    "date": m.get("release_date"),
+                    "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}" if m.get('poster_path') else None
                 })
             if data.get("page") >= data.get("total_pages") or len(results) >= 50:
                 break
             params["page"] += 1
     except Exception as e:
-        logger.error(f"TMDb discover error: {e}")
+        logger.error(f"Discover error: {e}")
     return results
 
 
-def tmdb_trending(media_type="all", time_window="day"):
-    """Get trending items in India from TMDb."""
+def tmdb_trending_india(media_type="all", time_window="day"):  # only Hindi/IN items
     endpoint = f"https://api.themoviedb.org/3/trending/{media_type}/{time_window}"
-    params = {"api_key": TMDB_API_KEY, "region": "IN"}
+    params = {"api_key": TMDB_API_KEY}
+    items = []
     try:
         resp = requests.get(endpoint, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        trends = []
-        for item in data.get("results", [])[:20]:
-            trends.append({
-                "title": item.get("title") or item.get("name"),
-                "media_type": item.get("media_type"),
-                "date": item.get("release_date") or item.get("first_air_date")
-            })
-        return trends
+        for it in data.get("results", [])[:50]:
+            lang = it.get("original_language")
+            country = it.get("origin_country", [])
+            if lang == "hi" or (isinstance(country, list) and "IN" in country):
+                items.append({
+                    "title": it.get("title") or it.get("name"),
+                    "media_type": it.get("media_type"),
+                    "date": it.get("release_date") or it.get("first_air_date"),
+                    "poster_url": f"https://image.tmdb.org/t/p/w500{it.get('poster_path')}" if it.get('poster_path') else None
+                })
+        return items[:20]
     except Exception as e:
-        logger.error(f"TMDb trending error: {e}")
+        logger.error(f"Trending error: {e}")
         return []
 
 
 @app.on_message(filters.command("latest"))
 async def latest_handler(client, message):
-    """/latest <days> [upcoming]
-    List Hindi titles released in India in the last N days (include upcoming if specified)."""
+    """Usage: /latest <days>
+    Show Hindi titles released in the last N days (including today)."""
     cmd = message.command
-    if len(cmd) < 2 or not cmd[1].isdigit():
-        return await message.reply_text("Usage: `/latest <days> [upcoming]` e.g. `/latest 7` or `/latest 1 upcoming`")
+    if len(cmd) != 2 or not cmd[1].isdigit():
+        return await message.reply_text("Usage: `/latest <days>` e.g. `/latest 1` or `/latest 7`")
     days = int(cmd[1])
-    include_up = len(cmd) > 2 and cmd[2].lower() == "upcoming"
-    movies = discover_latest_movies(days, include_upcoming=include_up)
+    today = datetime.utcnow().date()
+    start = today - timedelta(days=days-1)
+    movies = discover_movies_window(start, today)
     if not movies:
         return await message.reply_text(f"No Hindi titles found in the last {days} day(s).")
-
-    text = f"Hindi releases in the last {days} day(s){' (including upcoming)' if include_up else ''}:\n"
+    text = f"Hindi releases in the last {days} day(s):\n"
     for idx, m in enumerate(movies, 1):
         text += f"{idx}. {m['title']} ({m['date']})\n"
-        if idx >= 20:
-            break
+    await message.reply_text(text)
+
+
+@app.on_message(filters.command("upcoming"))
+async def upcoming_handler(client, message):
+    """Usage: /upcoming <days>
+    Show Hindi titles upcoming in the next N days (including today)."""
+    cmd = message.command
+    if len(cmd) != 2 or not cmd[1].isdigit():
+        return await message.reply_text("Usage: `/upcoming <days>` e.g. `/upcoming 10`")
+    days = int(cmd[1])
+    today = datetime.utcnow().date()
+    end = today + timedelta(days=days)
+    upcoming = discover_movies_window(today, end)
+    if not upcoming:
+        return await message.reply_text(f"No upcoming Hindi titles in the next {days} day(s).")
+    text = f"Upcoming Hindi titles in the next {days} day(s):\n"
+    for idx, m in enumerate(upcoming, 1):
+        text += f"{idx}. {m['title']} ({m['date']})\n"
     await message.reply_text(text)
 
 
 @app.on_message(filters.command("trending"))
 async def trending_handler(client, message):
-    """/trending [media] [time]
-    Show trending Indian movies/TV/all.
-    media: movie, tv, all (default all)
-    time: day, week (default day)"""
+    """Usage: /trending [media] [time]
+    Show trending Indian content: movies/TV/all (default all), day/week (default day)."""
     cmd = message.command
     media = cmd[1] if len(cmd) > 1 and cmd[1] in {"movie", "tv", "all"} else "all"
     window = cmd[2] if len(cmd) > 2 and cmd[2] in {"day", "week"} else "day"
-    trends = tmdb_trending(media_type=media, time_window=window)
+    trends = tmdb_trending_india(media_type=media, time_window=window)
     if not trends:
-        return await message.reply_text("Couldn't fetch trending data.")
-
-    text = f"Trending {media.capitalize()} ({window}):\n"
+        return await message.reply_text("No trending Indian content found.")
+    text = f"Trending Indian {media.capitalize()} ({window}):\n"
     for idx, t in enumerate(trends, 1):
         text += f"{idx}. [{t['media_type']}] {t['title']} ({t['date']})\n"
     await message.reply_text(text)
@@ -122,13 +133,54 @@ async def trending_handler(client, message):
 
 @app.on_message(filters.command("movielink"))
 async def movielink_handler(client, message):
+    """Usage: /movielink <movie name> <link>
+    Search TMDb for a movie (2021+), list options, then pick via reply."""
     if len(message.command) < 3:
         return await message.reply_text("Usage: `/movielink <movie name> <link>`")
     movie_name = " ".join(message.command[1:-1])
     link = message.command[-1]
-    # Keep original search after 2020
-    # ... existing fetch_movies_after_year logic could be here if desired
-    await message.reply_text("Use /latest or /trending for discovery commands.")
+    # Reuse earlier fetch logic: search TMDb for releases >=2021
+    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={movie_name}"
+    resp = requests.get(url, timeout=10).json()
+    options = []
+    for m in resp.get("results", []):
+        date = m.get("release_date", "")
+        if date and int(date.split("-")[0]) >= 2021 and m.get("poster_path"):
+            options.append({
+                "title": m.get("title"),
+                "date": date,
+                "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}"
+            })
+    if not options:
+        return await message.reply_text("No movies found released after 2020.")
+    movie_options[message.chat.id] = {"options": options, "link": link}
+    text = "Select a movie by number:\n"
+    for i, m in enumerate(options, 1):
+        text += f"{i}. {m['title']} ({m['date']})\n"
+    await message.reply_text(text)
+
+
+@app.on_message(filters.text & ~filters.regex(r'^/'))
+async def handle_selection(client, message):
+    data = movie_options.get(message.chat.id)
+    if not data or not message.text.isdigit():
+        return
+    choice = int(message.text)
+    opts, link = data['options'], data['link']
+    if choice < 1 or choice > len(opts):
+        return await message.reply_text("Invalid choice. Reply with a valid number.")
+    m = opts[choice-1]
+    caption = (
+        f"**{m['title']}** **Latest Movie** **{m['date']}**\n\n"
+        f"LOGIN & WATCH FULL VIDEOS\n━━━━━━━━━━━━━━━━━━━\n"
+        f"📥 Download Links / 👀 Watch Online\n\n"
+        f"480p {link}\n"
+        f"720p {link}\n"
+        f"1080p {link}\n\n"
+        f"Join @ORGPrime"
+    )
+    await client.send_photo(message.chat.id, m['poster_url'], caption=caption)
+    movie_options.pop(message.chat.id, None)
 
 
 if __name__ == "__main__":
