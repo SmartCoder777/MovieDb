@@ -3,6 +3,7 @@ from pyrogram import Client, filters
 import logging
 import time
 from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -25,143 +26,106 @@ movie_options = {}
 def fetch_movies_after_year(movie_name, min_year=2021):
     """Fetch movies from TMDB released in or after min_year."""
     url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={movie_name}"
-    retries = 3
-    backoff_time = 2
-    results = []
-
+    retries, backoff_time, results = 3, 2, []
     with requests.Session() as session:
         for attempt in range(retries):
             try:
-                response = session.get(url, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-
+                data = session.get(url, timeout=10).json()
                 for movie in data.get("results", []):
                     date = movie.get("release_date", "")
                     if not date:
                         continue
                     year = int(date.split("-")[0])
-                    if year >= min_year:
-                        poster = movie.get("poster_path")
-                        if poster:
-                            results.append({
-                                "title": movie.get("title"),
-                                "year": str(year),
-                                "poster_url": f"https://image.tmdb.org/t/p/w500{poster}"
-                            })
+                    if year >= min_year and movie.get("poster_path"):
+                        results.append({
+                            "title": movie["title"],
+                            "year": str(year),
+                            "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}"
+                        })
                 break
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error fetching: {e} (Attempt {attempt+1}/{retries})")
-                time.sleep(backoff_time)
-                backoff_time *= 2
+            except Exception as e:
+                logger.error(f"TMDB error: {e}")
+                time.sleep(backoff_time); backoff_time *= 2
     return results
 
 
-def fetch_movies_last_days(days):
-    """Fetch movies released within the last `days` days using TMDB Discover API."""
-    today = datetime.utcnow().date()
-    start_date = today - timedelta(days=days)
-    url = (
-        f"https://api.themoviedb.org/3/discover/movie?"
-        f"api_key={TMDB_API_KEY}&"
-        f"primary_release_date.gte={start_date}&"
-        f"primary_release_date.lte={today}&"
-        f"sort_by=primary_release_date.desc"
-    )
+def fetch_latest_from_gadgets360(days):
+    """Scrape gadgets360 for new Hindi movies and filter by published within `days`."""
+    url = "https://www.gadgets360.com/entertainment/new-hindi-movies"
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("results", [])
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching latest movies: {e}")
+        res = requests.get(url, timeout=10)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, "html.parser")
+        items = []
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        # Each movie entry is in <li class="latestNewsList">
+        for li in soup.select("ul.latestNewsList li"):  
+            a = li.find("a")
+            if not a:
+                continue
+            title = a.get_text(strip=True)
+            # Extract date from sibling <span class="time"> if available
+            time_span = li.find("span", class_="time")
+            pub_date = None
+            if time_span:
+                try:
+                    # e.g. 'Apr 30, 2025'
+                    pub_date = datetime.strptime(time_span.get_text(strip=True), "%b %d, %Y")
+                except:
+                    pub_date = None
+            # include if within days or if no date
+            if not pub_date or pub_date >= cutoff:
+                items.append({"title": title, "date": pub_date.strftime("%Y-%m-%d") if pub_date else "Unknown"})
+        return items
+    except Exception as e:
+        logger.error(f"Gadgets360 scrape error: {e}")
         return []
-
 
 @app.on_message(filters.command("movielink"))
 async def list_movie_options(client, message):
-    """List all movies released after 2020 matching the query."""
     if len(message.command) < 3:
-        await message.reply_text("Usage: `/movielink <movie name> <link>`")
-        return
-
+        return await message.reply_text("Usage: `/movielink <movie name> <link>`")
     movie_name = " ".join(message.command[1:-1])
     link = message.command[-1]
     options = fetch_movies_after_year(movie_name)
-
     if not options:
-        await message.reply_text("No movies found released after 2020.")
-        return
-
+        return await message.reply_text("No movies found released after 2020.")
     movie_options[message.chat.id] = {"options": options, "link": link}
-
-    text = "Found the following movies (reply with the number to select):\n"
-    for idx, m in enumerate(options, start=1):
-        text += f"{idx}. {m['title']} ({m['year']})\n"
-
+    text = "Found movies after 2020:\n"
+    for i, m in enumerate(options, 1): text += f"{i}. {m['title']} ({m['year']})\n"
     await message.reply_text(text)
-
 
 @app.on_message(filters.command("latest"))
 async def latest_movies(client, message):
-    """List movies released within the last N days."""
     if len(message.command) != 2 or not message.command[1].isdigit():
-        await message.reply_text("Usage: `/latest <days>` (e.g. `/latest 7`) to list movies from the last <days> days.")
-        return
-
+        return await message.reply_text("Usage: `/latest <days>` to list new Hindi movies from gadgets360.")
     days = int(message.command[1])
-    results = fetch_movies_last_days(days)
-    if not results:
-        await message.reply_text(f"No movies found in the last {days} day(s).")
-        return
-
-    text = f"Movies released in the last {days} day(s):\n"
-    for idx, movie in enumerate(results, start=1):
-        # show title and release date
-        date = movie.get("release_date", "Unknown")
-        text += f"{idx}. {movie.get('title')} ({date})\n"
-        if idx >= 20:
-            break  # cap to first 20 results
-
+    items = fetch_latest_from_gadgets360(days)
+    if not items:
+        return await message.reply_text(f"No new Hindi movies found in the last {days} day(s).")
+    text = f"New Hindi movies in the last {days} day(s):\n"
+    for idx, it in enumerate(items, 1):
+        text += f"{idx}. {it['title']} ({it['date']})\n"
+        if idx >= 20: break
     await message.reply_text(text)
 
-
-# Selection handler (exclude commands)
 @app.on_message(filters.text & ~filters.regex(r'^/'))
 async def handle_selection(client, message):
-    """Handles numeric selection to send the chosen movie poster."""
     data = movie_options.get(message.chat.id)
-    if not data:
+    if not data or not message.text.isdigit():
         return
-
-    text = message.text.strip()
-    if not text.isdigit():
-        return
-
-    choice = int(text)
-    options = data["options"]
-    link = data["link"]
-
-    if choice < 1 or choice > len(options):
-        await message.reply_text("Invalid choice. Please reply with a valid number.")
-        return
-
-    movie = options[choice-1]
+    choice = int(message.text)
+    opts, link = data['options'], data['link']
+    if choice < 1 or choice > len(opts):
+        return await message.reply_text("Invalid choice.")
+    m = opts[choice-1]
     caption = (
-        f"**{movie['title']}** **Latest Movie** **{movie['year']}**\n\n"
-        f"LOGIN & WATCH FULL VIDEOS\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"📥 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐋𝐢𝐧𝐤𝐬/👀𝐖𝐚𝐭𝐜𝐡 𝐎𝐧𝐥𝐢𝐧𝐞\n\n"
-        f"HINDI ENGLISH TAMIL TELUGU\n\n"
-        f"480p\n\n{link}\n\n"
-        f"720p\n\n{link}\n\n"
-        f"1080p\n\n{link}\n"
-        f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
-        f"Join @ORGPrime"
+        f"**{m['title']}** **Latest Movie** **{m['year']}**\n\n"
+        f"LOGIN & WATCH FULL VIDEOS\n━━━━━━━━━━━━━━━━━━━\n"
+        f"📥 Download Links / 👀 Watch Online\n\n480p {link}\n720p {link}\n1080p {link}\n\nJoin @ORGPrime"
     )
-    await client.send_photo(message.chat.id, movie["poster_url"], caption=caption)
+    await client.send_photo(message.chat.id, m['poster_url'], caption=caption)
     movie_options.pop(message.chat.id, None)
-
 
 if __name__ == "__main__":
     app.run()
