@@ -2,6 +2,7 @@ import requests
 from pyrogram import Client, filters
 import logging
 import time
+from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -39,18 +40,13 @@ def fetch_movies_after_year(movie_name, min_year=2021):
                     date = movie.get("release_date", "")
                     if not date:
                         continue
-                    year = date.split("-")[0]
-                    try:
-                        year_int = int(year)
-                    except ValueError:
-                        continue
-                    if year_int >= min_year:
-                        title = movie.get("title")
+                    year = int(date.split("-")[0])
+                    if year >= min_year:
                         poster = movie.get("poster_path")
                         if poster:
                             results.append({
-                                "title": title,
-                                "year": year,
+                                "title": movie.get("title"),
+                                "year": str(year),
                                 "poster_url": f"https://image.tmdb.org/t/p/w500{poster}"
                             })
                 break
@@ -59,6 +55,27 @@ def fetch_movies_after_year(movie_name, min_year=2021):
                 time.sleep(backoff_time)
                 backoff_time *= 2
     return results
+
+
+def fetch_movies_last_days(days):
+    """Fetch movies released within the last `days` days using TMDB Discover API."""
+    today = datetime.utcnow().date()
+    start_date = today - timedelta(days=days)
+    url = (
+        f"https://api.themoviedb.org/3/discover/movie?"
+        f"api_key={TMDB_API_KEY}&"
+        f"primary_release_date.gte={start_date}&"
+        f"primary_release_date.lte={today}&"
+        f"sort_by=primary_release_date.desc"
+    )
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("results", [])
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching latest movies: {e}")
+        return []
 
 
 @app.on_message(filters.command("movielink"))
@@ -85,13 +102,37 @@ async def list_movie_options(client, message):
     await message.reply_text(text)
 
 
-# Use regex to exclude any command (i.e., lines starting with '/')
+@app.on_message(filters.command("latest"))
+async def latest_movies(client, message):
+    """List movies released within the last N days."""
+    if len(message.command) != 2 or not message.command[1].isdigit():
+        await message.reply_text("Usage: `/latest <days>` (e.g. `/latest 7`) to list movies from the last <days> days.")
+        return
+
+    days = int(message.command[1])
+    results = fetch_movies_last_days(days)
+    if not results:
+        await message.reply_text(f"No movies found in the last {days} day(s).")
+        return
+
+    text = f"Movies released in the last {days} day(s):\n"
+    for idx, movie in enumerate(results, start=1):
+        # show title and release date
+        date = movie.get("release_date", "Unknown")
+        text += f"{idx}. {movie.get('title')} ({date})\n"
+        if idx >= 20:
+            break  # cap to first 20 results
+
+    await message.reply_text(text)
+
+
+# Selection handler (exclude commands)
 @app.on_message(filters.text & ~filters.regex(r'^/'))
 async def handle_selection(client, message):
     """Handles numeric selection to send the chosen movie poster."""
     data = movie_options.get(message.chat.id)
     if not data:
-        return  # no pending options
+        return
 
     text = message.text.strip()
     if not text.isdigit():
