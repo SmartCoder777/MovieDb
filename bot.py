@@ -76,7 +76,6 @@ async def list_movie_options(client, message):
         await message.reply_text("No movies found released after 2020.")
         return
 
-    # Store options and link for this chat
     movie_options[message.chat.id] = {"options": options, "link": link}
 
     text = "Found the following movies (reply with the number to select):\n"
@@ -86,7 +85,7 @@ async def list_movie_options(client, message):
     await message.reply_text(text)
 
 
-@app.on_message(filters.chat & filters.text & ~filters.command)
+@app.on_message(filters.text & ~filters.command)
 async def handle_selection(client, message):
     """Handles numeric selection to send the chosen movie poster."""
     data = movie_options.get(message.chat.id)
@@ -119,7 +118,6 @@ async def handle_selection(client, message):
         f"Join @ORGPrime"
     )
     await client.send_photo(message.chat.id, movie["poster_url"], caption=caption)
-    # Clear stored options
     movie_options.pop(message.chat.id, None)
 
 
