@@ -91,8 +91,8 @@ async def start(client, message):
     ])
     await message.reply(
         "👋 Welcome to **MovieBot** 🎥\n"
-        "\nGet the latest and trending **Hindi** movie details, or upload links with style!"
-        "\nChoose an option below to begin:",
+        "Get the latest and trending **Hindi** movie details, or upload links with style!\n"
+        "Choose an option below to begin:",
         reply_markup=kb
     )
 
@@ -113,8 +113,8 @@ async def callback_handler(client, query: CallbackQuery):
     elif data.startswith("latest_"):
         days = int(data.split("_")[1])
         today = datetime.utcnow().date()
-        start = today - timedelta(days=days - 1)
-        movies = discover_movies_window(start, today)
+        start_date = today - timedelta(days=days - 1)
+        movies = discover_movies_window(start_date, today)
         if not movies:
             return await query.message.edit_text("No Hindi titles found.")
         text = f"🔥 Hindi releases in the last {days} day(s):\n\n"
@@ -132,8 +132,8 @@ async def callback_handler(client, query: CallbackQuery):
     elif data.startswith("upcoming_"):
         days = int(data.split("_")[1])
         today = datetime.utcnow().date()
-        end = today + timedelta(days=days)
-        upcoming = discover_movies_window(today, end)
+        end_date = today + timedelta(days=days)
+        upcoming = discover_movies_window(today, end_date)
         if not upcoming:
             return await query.message.edit_text("No upcoming Hindi titles found.")
         text = f"🎬 Upcoming Hindi titles in the next {days} day(s):\n\n"
@@ -159,7 +159,7 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.edit_text("Choose your team for movie link branding:", reply_markup=kb)
 
     elif data.startswith("set_team_"):
-        team = data.replace("set_team_", "@")
+        team = "@" + data.split("_")[-1]
         link_flow_state[user_id]["team"] = team
         await query.message.edit_text("Now send the *movie name* and *any link* in the same message:", parse_mode="markdown")
 
@@ -194,9 +194,7 @@ async def handle_movie_input(client, message: Message):
         return await message.reply("No recent movie found with that name.")
 
     movie_options[user_id] = {"options": options, "link": link, "team": link_flow_state[user_id]["team"]}
-    text = "Select the movie you meant by replying with its number:
-
-"
+    text = "Select the movie you meant by replying with its number:\n\n"
     for i, m in enumerate(options, 1):
         text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
     await message.reply(text)
@@ -216,19 +214,16 @@ async def handle_number_reply(client, message: Message):
         return await message.reply("Invalid choice.")
 
     m = opts[choice - 1]
-    caption = f"""
-🎬 **{m['title']}**
-📅 Released: **{m['date']}**
-
-📺 Watch in: `Hindi` | `English` | `Tamil` | `Telugu`
-
-🔗 Select Quality:
-▪️ 480p: [Click Here]({link})
-▪️ 720p: [Click Here]({link})
-▪️ 1080p: [Click Here]({link})
-
-🔔 Stay Updated with {team}
-"""
+    caption = (
+        f"🎬 **{m['title']}**\n"
+        f"📅 Released: **{m['date']}**\n\n"
+        f"📺 Watch in: `Hindi` | `English` | `Tamil` | `Telugu`\n\n"
+        f"🔗 Select Quality:\n"
+        f"▪️ 480p: [Click Here]({link})\n"
+        f"▪️ 720p: [Click Here]({link})\n"
+        f"▪️ 1080p: [Click Here]({link})\n\n"
+        f"🔔 Stay Updated with {team}"
+    )
     await client.send_photo(message.chat.id, m['poster_url'], caption=caption, parse_mode="markdown")
     movie_options.pop(user_id, None)
     link_flow_state.pop(user_id, None)
