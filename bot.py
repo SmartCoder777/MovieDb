@@ -178,7 +178,7 @@ async def callback_handler(client, query: CallbackQuery):
         return
 
 # -------------------- Handle Movie Entry --------------------
-@app.on_message(filters.text & ~filters.command & ~filters.reply)
+@app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
 async def handle_movie_entry(client, message: Message):
     uid = message.from_user.id
     if uid not in link_flow_state or uid in movie_options:
@@ -217,12 +217,12 @@ async def handle_number_reply(client, message: Message):
     caption = (
         f"✨🎬 <b>{title}</b> ✨\n"
         f"📅 <i>Release Date:</i> <b>{date}</b>\n\n"
-        f"🤩 <b>LOGIN & WATCH FULL MOVIE</b>\n"
+        f"🔐 <b>LOGIN & WATCH FULL MOVIE</b>\n"
         "──────────────────\n"
         f"🌐 <u>Language:</u> HINDI / ENGLISH / TAMIL\n\n"
-        f"💕 <b>480P</b>\n{link}\n\n"
-        f"💕 <b>720P</b>\n{link}\n\n"
-        f"💕 <b>1080P</b>\n{link}\n\n"
+        f"🔻 <b>480P</b>\n{link}\n\n"
+        f"🔺 <b>720P</b>\n{link}\n\n"
+        f"⏫ <b>1080P</b>\n{link}\n\n"
         f"🔔 <b>STAY UPDATED {team}</b>🔔"
     )
     await client.send_photo(message.chat.id, img_url, caption=caption, parse_mode=ParseMode.HTML)
