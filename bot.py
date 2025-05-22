@@ -19,6 +19,7 @@ API_HASH = "dd54732e78650479ac4fb0e173fe4759"
 BOT_TOKEN = "7624981552:AAGHzGUItHecmxxp2oCrP6j3Wk6vtgxnH2I"
 TMDB_API_KEY = "1eacddf9bc17e39d80e6144ab49cad71"
 
+# Initialize bot
 app = Client(
     "movie_bot",
     api_id=API_ID,
@@ -47,6 +48,7 @@ def discover_movies_window(start_date, end_date):
     try:
         while True:
             resp = requests.get(endpoint, params=params, timeout=10)
+            resp.raise_for_status()
             data = resp.json()
             for m in data.get("results", []):
                 results.append({
@@ -68,6 +70,7 @@ def tmdb_trending_india():
     items = []
     try:
         resp = requests.get(endpoint, params=params, timeout=10)
+        resp.raise_for_status()
         data = resp.json()
         for it in data.get("results", [])[:20]:
             lang = it.get("original_language")
@@ -75,17 +78,14 @@ def tmdb_trending_india():
             if lang == "hi" or (isinstance(country, list) and "IN" in country):
                 items.append({
                     "title": it.get("title") or it.get("name"),
-                    "media_type": it.get("media_type"),
                     "date": it.get("release_date") or it.get("first_air_date"),
                     "poster_url": f"https://image.tmdb.org/t/p/w500{it.get('poster_path')}" if it.get('poster_path') else None
                 })
-        return items
     except Exception as e:
         logger.error(f"Trending error: {e}")
-        return []
+    return items
 
 # -------------------- /start --------------------
-
 @app.on_message(filters.command("start"))
 async def start(client, message: Message):
     kb = InlineKeyboardMarkup([
@@ -96,136 +96,136 @@ async def start(client, message: Message):
     ])
     await message.reply(
         "👋 <b>Welcome to MovieBot</b> 🎥\n"
-        "Get the latest and trending Hindi movie details, or upload links with style!\n"
-        "Choose an option below to begin:",
+        "Get the latest & trending Hindi movies or share links in style!",
         reply_markup=kb,
         parse_mode=ParseMode.HTML
     )
 
-# -------------------- Callbacks --------------------
-
+# -------------------- Callback Handlers --------------------
 @app.on_callback_query()
 async def callback_handler(client, query: CallbackQuery):
     data = query.data
     uid = query.from_user.id
 
-    # Latest
+    # Latest releases
     if data == "latest_menu":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("1 Day", callback_data="latest_1"),
-             InlineKeyboardButton("2 Days", callback_data="latest_2")],
-            [InlineKeyboardButton("10 Days", callback_data="latest_10")]
+             InlineKeyboardButton("7 Days", callback_data="latest_7")],
+            [InlineKeyboardButton("30 Days", callback_data="latest_30")]
         ])
-        return await query.message.edit_text(
-            "Choose how many days of latest Hindi releases to view:",
-            reply_markup=kb, parse_mode=ParseMode.HTML
-        )
+        await query.message.reply("Choose range for 🔥 Latest releases:", reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
+
     if data.startswith("latest_"):
         days = int(data.split("_")[1])
-        today = datetime.utcnow().date()
-        movies = discover_movies_window(today - timedelta(days=days-1), today)
-        text = "🔥 Releases last {} days:\n\n".format(days)
-        text += "\n".join(f"{i}. 🎬 {m['title']} ({m['date']})" for i,m in enumerate(movies,1)) or "No Hindi titles found."
-        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+        end = datetime.utcnow().date()
+        start = end - timedelta(days=days-1)
+        movies = discover_movies_window(start, end)
+        if not movies:
+            text = "No Hindi releases found."
+        else:
+            text = f"🔥 Releases in last {days} days:\n" + "\n".join(f"{i}. {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        await query.message.reply(text, parse_mode=ParseMode.HTML)
+        return
 
-    # Upcoming
+    # Upcoming releases
     if data == "upcoming_menu":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("1 Day", callback_data="upcoming_1"),
-             InlineKeyboardButton("2 Days", callback_data="upcoming_2")],
-            [InlineKeyboardButton("10 Days", callback_data="upcoming_10")]
+            [InlineKeyboardButton("7 Days", callback_data="upcoming_7"),
+             InlineKeyboardButton("14 Days", callback_data="upcoming_14")],
+            [InlineKeyboardButton("30 Days", callback_data="upcoming_30")]
         ])
-        return await query.message.edit_text(
-            "Choose how many days of upcoming Hindi releases to view:",
-            reply_markup=kb, parse_mode=ParseMode.HTML
-        )
+        await query.message.reply("Choose range for 🎬 Upcoming:", reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
+
     if data.startswith("upcoming_"):
         days = int(data.split("_")[1])
-        today = datetime.utcnow().date()
-        movies = discover_movies_window(today, today+timedelta(days=days))
-        text = "🎬 Upcoming next {} days:\n\n".format(days)
-        text += "\n".join(f"{i}. 🎥 {m['title']} ({m['date']})" for i,m in enumerate(movies,1)) or "No upcoming Hindi titles found."
-        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+        start = datetime.utcnow().date()
+        end = start + timedelta(days=days)
+        movies = discover_movies_window(start, end)
+        if not movies:
+            text = "No upcoming Hindi titles."
+        else:
+            text = f"🎬 Upcoming in next {days} days:\n" + "\n".join(f"{i}. {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        await query.message.reply(text, parse_mode=ParseMode.HTML)
+        return
 
-    # Trending
+    # Trending this week
     if data == "trending_now":
         trends = tmdb_trending_india()
-        text = "📈 Trending this week:\n\n"
-        text += "\n".join(f"{i}. 📺 {t['title']} ({t['date']})" for i,t in enumerate(trends,1)) or "No trending content found."
-        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+        if not trends:
+            text = "No trending content found."
+        else:
+            text = "📈 Trending this week:\n" + "\n".join(f"{i}. {t['title']} ({t['date']})" for i,t in enumerate(trends,1))
+        await query.message.reply(text, parse_mode=ParseMode.HTML)
+        return
 
-    # Movie Link
+    # Movie Link flow
     if data == "movie_link_start":
         link_flow_state[uid] = {}
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("@Team_HDT", callback_data="set_team_team_hdt"),
-             InlineKeyboardButton("@ORGSupport", callback_data="set_team_orgsupport")]
+            [InlineKeyboardButton("@Team_HDT", callback_data="team_hdt"), InlineKeyboardButton("@ORGSupport", callback_data="team_org")]
         ])
-        return await query.message.edit_text(
-            "Choose your team handle:", reply_markup=kb, parse_mode=ParseMode.HTML
-        )
-    if data.startswith("set_team_"):
-        handle = "@" + data.split("_")[-1]
-        link_flow_state[uid]["team"] = handle
-        movie_options.pop(uid, None)
-        return await query.message.edit_text(
-            "Great! Now send me your movie name and link in one message.",
-            parse_mode=ParseMode.HTML
-        )
+        await query.message.reply("🎞️ Choose your team handle:", reply_markup=kb, parse_mode=ParseMode.HTML)
+        return
 
-# -------------------- Movie Input --------------------
-@app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
-async def handle_movie_input(client, message: Message):
+    if data in ("team_hdt", "team_org"):
+        team = "@Team_HDT" if data == "team_hdt" else "@ORGSupport"
+        link_flow_state[uid]["team"] = team
+        movie_options.pop(uid, None)
+        await query.message.reply("✨ Great! Now send <b>Movie Name</b> and <b>Link</b> together:", parse_mode=ParseMode.HTML)
+        return
+
+# -------------------- Handle Movie Entry --------------------
+@app.on_message(filters.text & ~filters.command & ~filters.reply)
+async def handle_movie_entry(client, message: Message):
     uid = message.from_user.id
     if uid not in link_flow_state or uid in movie_options:
         return
-    text = message.text.strip()
-    match = re.search(r"https?://\S+", text)
-    if not match:
-        return await message.reply("<b>Please send both movie name and link.</b>", parse_mode=ParseMode.HTML)
-
-    link = match.group(0)
+    text = message.text
+    m = re.search(r"https?://\S+", text)
+    if not m:
+        await message.reply("⚠️ <b>Please include both name and link.</b>", parse_mode=ParseMode.HTML)
+        return
+    link = m.group(0)
     name = re.sub(r"https?://\S+", "", text).strip()
-    resp = requests.get(
-        f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={name}", timeout=10
-    ).json()
-    opts = [m for m in resp.get("results", []) if m.get("poster_path") and m.get("release_date", "").startswith(("2021","2022","2023","2024","2025"))]
+    resp = requests.get(f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={name}", timeout=10).json().get("results", [])
+    opts = [o for o in resp if o.get("poster_path")]
     if not opts:
-        return await message.reply("<b>No matches found.</b>", parse_mode=ParseMode.HTML)
-
+        await message.reply("<b>No matches found.</b>", parse_mode=ParseMode.HTML)
+        return
     movie_options[uid] = {"opts": opts[:5], "link": link, "team": link_flow_state[uid]["team"]}
-    reply = "<b>Select a movie by number:</b>\n\n"
-    reply += "\n".join(f"{i}. 🎬 {m['title']} ({m['release_date']})" for i,m in enumerate(movie_options[uid]["opts"],1))
-    await message.reply(reply, parse_mode=ParseMode.HTML)
+    choices = "\n".join(f"{i}. 🎥 <b>{o['title']}</b> ({o.get('release_date','?')})" for i,o in enumerate(opts[:5],1))
+    await message.reply(f"<b>🔍 Options:</b>\n{choices}\n\nReply with the number:", parse_mode=ParseMode.HTML)
 
-# -------------------- Number Reply --------------------
+# -------------------- Handle Number Reply --------------------
 @app.on_message(filters.regex(r"^\d+$"))
 async def handle_number_reply(client, message: Message):
     uid = message.from_user.id
     if uid not in movie_options:
         return
     choice = int(message.text)
-    data = movie_options[uid]
-    if choice < 1 or choice > len(data["opts"]):
-        return await message.reply("<b>Invalid choice.</b>", parse_mode=ParseMode.HTML)
-
-    m = data["opts"][choice-1]
-    link = data["link"]
-    team = data["team"]
-    img = m.get("poster_path")
-    img_url = f"https://image.tmdb.org/t/p/w500{img}" if img else None
+    data = movie_options.pop(uid)
+    link = data['link']; team = data['team']; opts = data['opts']
+    if choice < 1 or choice > len(opts):
+        await message.reply("❌ <b>Invalid choice.</b>", parse_mode=ParseMode.HTML)
+        return
+    m = opts[choice-1]
+    title = m['title']; date = m.get('release_date','?')
+    img_url = f"https://image.tmdb.org/t/p/w500{m['poster_path']}"
     caption = (
-        f"<b>🎬 {m['title']}</b>\n"
-        f"📅 Released: <b>{m['release_date']}</b>\n\n"
-        f"🔗 <a href=\"{link}\">480p</a> | <a href=\"{link}\">720p</a> | <a href=\"{link}\">1080p</a>\n\n"
-        f"🔔 Stay Updated: {team}"
+        f"✨🎬 <b>{title}</b> ✨\n"
+        f"📅 <i>Release Date:</i> <b>{date}</b>\n\n"
+        f"🤩 <b>LOGIN & WATCH FULL MOVIE</b>\n"
+        "──────────────────\n"
+        f"🌐 <u>Language:</u> HINDI / ENGLISH / TAMIL\n\n"
+        f"💕 <b>480P</b>\n{link}\n\n"
+        f"💕 <b>720P</b>\n{link}\n\n"
+        f"💕 <b>1080P</b>\n{link}\n\n"
+        f"🔔 <b>STAY UPDATED {team}</b>🔔"
     )
-    await client.send_photo(
-        message.chat.id, img_url,
-        caption=caption,
-        parse_mode=ParseMode.HTML
-    )
-    movie_options.pop(uid, None)
+    await client.send_photo(message.chat.id, img_url, caption=caption, parse_mode=ParseMode.HTML)
     link_flow_state.pop(uid, None)
 
 if __name__ == "__main__":
