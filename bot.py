@@ -171,7 +171,7 @@ async def callback_handler(client, query: CallbackQuery):
 
 # -------------------- Handle User Text --------------------
 
-@app.on_message(filters.text & ~filters.command)
+@app.on_message(filters.text & ~filters.command())
 async def handle_movie_input(client, message: Message):
     user_id = message.from_user.id
     if user_id not in link_flow_state or "team" not in link_flow_state[user_id]:
