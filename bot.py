@@ -125,10 +125,7 @@ async def callback_handler(client, query: CallbackQuery):
         today = datetime.utcnow().date()
         movies = discover_movies_window(today - timedelta(days=days-1), today)
         text = "🔥 Releases last {} days:\n\n".format(days)
-        if not movies:
-            text = "No Hindi titles found."
-        else:
-            text += "\n".join(f"{i}. 🎬 {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        text += "\n".join(f"{i}. 🎬 {m['title']} ({m['date']})" for i,m in enumerate(movies,1)) or "No Hindi titles found."
         return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
     # Upcoming
@@ -147,23 +144,17 @@ async def callback_handler(client, query: CallbackQuery):
         today = datetime.utcnow().date()
         movies = discover_movies_window(today, today+timedelta(days=days))
         text = "🎬 Upcoming next {} days:\n\n".format(days)
-        if not movies:
-            text = "No upcoming Hindi titles found."
-        else:
-            text += "\n".join(f"{i}. 🎥 {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        text += "\n".join(f"{i}. 🎥 {m['title']} ({m['date']})" for i,m in enumerate(movies,1)) or "No upcoming Hindi titles found."
         return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
     # Trending
     if data == "trending_now":
         trends = tmdb_trending_india()
         text = "📈 Trending this week:\n\n"
-        if not trends:
-            text = "No trending content found."
-        else:
-            text += "\n".join(f"{i}. 📺 {t['title']} ({t['date']})" for i,t in enumerate(trends,1))
+        text += "\n".join(f"{i}. 📺 {t['title']} ({t['date']})" for i,t in enumerate(trends,1)) or "No trending content found."
         return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
-    # Movie Link Uploader
+    # Movie Link
     if data == "movie_link_start":
         link_flow_state[uid] = {}
         kb = InlineKeyboardMarkup([
@@ -176,7 +167,6 @@ async def callback_handler(client, query: CallbackQuery):
     if data.startswith("set_team_"):
         handle = "@" + data.split("_")[-1]
         link_flow_state[uid]["team"] = handle
-        # Clear any previous options
         movie_options.pop(uid, None)
         return await query.message.edit_text(
             "Great! Now send me your movie name and link in one message.",
@@ -187,7 +177,6 @@ async def callback_handler(client, query: CallbackQuery):
 @app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
 async def handle_movie_input(client, message: Message):
     uid = message.from_user.id
-    # Only accept movie+link if user has chosen a team and has no pending options
     if uid not in link_flow_state or uid in movie_options:
         return
     text = message.text.strip()
@@ -200,22 +189,13 @@ async def handle_movie_input(client, message: Message):
     resp = requests.get(
         f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={name}", timeout=10
     ).json()
-    opts = [m for m in resp.get("results", []) if m.get("poster_path")
-            and m.get("release_date", "").startswith(("2021","2022","2023","2024","2025"))]
+    opts = [m for m in resp.get("results", []) if m.get("poster_path") and m.get("release_date", "").startswith(("2021","2022","2023","2024","2025"))]
     if not opts:
         return await message.reply("<b>No matches found.</b>", parse_mode=ParseMode.HTML)
 
-    # Save options and original link + team
-    movie_options[uid] = {
-        "opts": opts[:5],  # limit to first 5
-        "link": link,
-        "team": link_flow_state[uid]["team"]
-    }
+    movie_options[uid] = {"opts": opts[:5], "link": link, "team": link_flow_state[uid]["team"]}
     reply = "<b>Select a movie by number:</b>\n\n"
-    for i, m in enumerate(movie_options[uid]["opts"], 1):
-        title = m.get("title")
-        date = m.get("release_date")
-        reply += f"{i}. 🎬 {title} ({date})\n"
+    reply += "\n".join(f"{i}. 🎬 {m['title']} ({m['release_date']})" for i,m in enumerate(movie_options[uid]["opts"],1))
     await message.reply(reply, parse_mode=ParseMode.HTML)
 
 # -------------------- Number Reply --------------------
@@ -243,10 +223,8 @@ async def handle_number_reply(client, message: Message):
     await client.send_photo(
         message.chat.id, img_url,
         caption=caption,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True
+        parse_mode=ParseMode.HTML
     )
-    # reset state
     movie_options.pop(uid, None)
     link_flow_state.pop(uid, None)
 
