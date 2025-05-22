@@ -215,7 +215,7 @@ async def handle_number_reply(client, message: Message):
     title = m['title']; date = m.get('release_date','?')
     img_url = f"https://image.tmdb.org/t/p/w500{m['poster_path']}"
     caption = (
-        f"✨🎬 <b>{title}</b> ✨ Latest Movie\n"
+        f"✨🎬 <b>{title} Latest Movie </b> ✨ \n"
         f"📅 <i>Release Date:</i> <b>{date}</b>\n\n"
         f"🤩 <b>LOGIN & WATCH FULL MOVIE</b> \n"
         "──────────────────\n"
@@ -223,7 +223,8 @@ async def handle_number_reply(client, message: Message):
         f"💕 <b>480P</b>\n{link}\n\n"
         f"💕 <b>720P</b>\n{link}\n\n"
         f"💕 <b>1080P</b>\n{link}\n\n"
-        f"🔔 <b>STAY UPDATED {team}</b>🔔"
+        "──────────────────\n"
+        f"🔔 <b>STAY UPDATED {team}</b>"
     )
     await client.send_photo(message.chat.id, img_url, caption=caption, parse_mode=ParseMode.HTML)
     link_flow_state.pop(uid, None)
