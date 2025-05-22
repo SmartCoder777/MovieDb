@@ -1,6 +1,7 @@
 import re
 import requests
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import (
     InlineKeyboardButton, InlineKeyboardMarkup,
     Message, CallbackQuery
@@ -18,7 +19,12 @@ API_HASH = "dd54732e78650479ac4fb0e173fe4759"
 BOT_TOKEN = "7624981552:AAGHzGUItHecmxxp2oCrP6j3Wk6vtgxnH2I"
 TMDB_API_KEY = "1eacddf9bc17e39d80e6144ab49cad71"
 
-app = Client("movie_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client(
+    "movie_bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
 movie_options = {}
 link_flow_state = {}
@@ -80,20 +86,19 @@ def tmdb_trending_india():
 # -------------------- Start + Buttons --------------------
 
 @app.on_message(filters.command("start"))
-async def start(client, message):
+async def start(client, message: Message):
     kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🔥 Latest", callback_data="latest_menu"),
-            InlineKeyboardButton("🎬 Upcoming", callback_data="upcoming_menu")
-        ],
+        [InlineKeyboardButton("🔥 Latest", callback_data="latest_menu"),
+         InlineKeyboardButton("🎬 Upcoming", callback_data="upcoming_menu")],
         [InlineKeyboardButton("📈 Trending", callback_data="trending_now")],
         [InlineKeyboardButton("🎞️ Movie Link Uploader", callback_data="movie_link_start")]
     ])
     await message.reply(
-        "👋 Welcome to **MovieBot** 🎥\n"
-        "Get the latest and trending **Hindi** movie details, or upload links with style!\n"
+        "👋 <b>Welcome to MovieBot</b> 🎥\n"
+        "Get the latest and trending Hindi movie details, or upload links with style!\n"
         "Choose an option below to begin:",
-        reply_markup=kb
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML
     )
 
 # -------------------- Callback Handlers --------------------
@@ -105,10 +110,15 @@ async def callback_handler(client, query: CallbackQuery):
 
     if data == "latest_menu":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("1 Day", callback_data="latest_1"), InlineKeyboardButton("2 Days", callback_data="latest_2")],
+            [InlineKeyboardButton("1 Day", callback_data="latest_1"),
+             InlineKeyboardButton("2 Days", callback_data="latest_2")],
             [InlineKeyboardButton("10 Days", callback_data="latest_10")]
         ])
-        await query.message.edit_text("Choose how many days of latest Hindi releases to view:", reply_markup=kb)
+        await query.message.edit_text(
+            "Choose how many days of latest Hindi releases to view:",
+            reply_markup=kb,
+            parse_mode=ParseMode.HTML
+        )
 
     elif data.startswith("latest_"):
         days = int(data.split("_")[1])
@@ -116,18 +126,23 @@ async def callback_handler(client, query: CallbackQuery):
         start_date = today - timedelta(days=days - 1)
         movies = discover_movies_window(start_date, today)
         if not movies:
-            return await query.message.edit_text("No Hindi titles found.")
+            return await query.message.edit_text("No Hindi titles found.", parse_mode=ParseMode.HTML)
         text = f"🔥 Hindi releases in the last {days} day(s):\n\n"
         for idx, m in enumerate(movies, 1):
             text += f"{idx}. 🎬 {m['title']} ({m['date']})\n"
-        await query.message.edit_text(text)
+        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
     elif data == "upcoming_menu":
         kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("1 Day", callback_data="upcoming_1"), InlineKeyboardButton("2 Days", callback_data="upcoming_2")],
+            [InlineKeyboardButton("1 Day", callback_data="upcoming_1"),
+             InlineKeyboardButton("2 Days", callback_data="upcoming_2")],
             [InlineKeyboardButton("10 Days", callback_data="upcoming_10")]
         ])
-        await query.message.edit_text("Choose how many days of upcoming Hindi releases to view:", reply_markup=kb)
+        await query.message.edit_text(
+            "Choose how many days of upcoming Hindi releases to view:",
+            reply_markup=kb,
+            parse_mode=ParseMode.HTML
+        )
 
     elif data.startswith("upcoming_"):
         days = int(data.split("_")[1])
@@ -135,20 +150,20 @@ async def callback_handler(client, query: CallbackQuery):
         end_date = today + timedelta(days=days)
         upcoming = discover_movies_window(today, end_date)
         if not upcoming:
-            return await query.message.edit_text("No upcoming Hindi titles found.")
+            return await query.message.edit_text("No upcoming Hindi titles found.", parse_mode=ParseMode.HTML)
         text = f"🎬 Upcoming Hindi titles in the next {days} day(s):\n\n"
         for idx, m in enumerate(upcoming, 1):
             text += f"{idx}. 🎥 {m['title']} ({m['date']})\n"
-        await query.message.edit_text(text)
+        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
     elif data == "trending_now":
         trends = tmdb_trending_india()
         if not trends:
-            return await query.message.edit_text("No trending content found.")
+            return await query.message.edit_text("No trending content found.", parse_mode=ParseMode.HTML)
         text = f"📈 Trending Hindi Movies/Shows (This Week):\n\n"
         for idx, t in enumerate(trends, 1):
             text += f"{idx}. 📺 {t['title']} ({t['date']})\n"
-        await query.message.edit_text(text)
+        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
     elif data == "movie_link_start":
         link_flow_state[user_id] = {}
@@ -156,12 +171,19 @@ async def callback_handler(client, query: CallbackQuery):
             [InlineKeyboardButton("@Team_HDT", callback_data="set_team_team_hdt"),
              InlineKeyboardButton("@ORGSupport", callback_data="set_team_orgsupport")]
         ])
-        await query.message.edit_text("Choose your team for movie link branding:", reply_markup=kb)
+        await query.message.edit_text(
+            "Choose your team for movie link branding:",
+            reply_markup=kb,
+            parse_mode=ParseMode.HTML
+        )
 
     elif data.startswith("set_team_"):
         team = "@" + data.split("_")[-1]
         link_flow_state[user_id]["team"] = team
-        await query.message.edit_text("Now send the *movie name* and *any link* in the same message:", parse_mode="markdown")
+        await query.message.edit_text(
+            "Now send the movie name and any link in the same message:",
+            parse_mode=ParseMode.HTML
+        )
 
 # -------------------- Handle User Text --------------------
 
@@ -174,7 +196,10 @@ async def handle_movie_input(client, message: Message):
     text = message.text.strip()
     link_match = re.search(r"https?://\S+", text)
     if not link_match:
-        return await message.reply("Please include a valid link with the movie name.")
+        return await message.reply(
+            "Please include a valid link with the movie name.",
+            parse_mode=ParseMode.HTML
+        )
 
     link = link_match.group(0)
     movie_name = re.sub(r"https?://\S+", "", text).strip()
@@ -191,13 +216,19 @@ async def handle_movie_input(client, message: Message):
                 "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}"
             })
     if not options:
-        return await message.reply("No recent movie found with that name.")
+        return await message.reply(
+            "No recent movie found with that name.",
+            parse_mode=ParseMode.HTML
+        )
 
     movie_options[user_id] = {"options": options, "link": link, "team": link_flow_state[user_id]["team"]}
-    text = "Select the movie you meant by replying with its number:\n\n"
+    response_text = "Select the movie you meant by replying with its number:\n\n"
     for i, m in enumerate(options, 1):
-        text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
-    await message.reply(text)
+        response_text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
+    await message.reply(
+        response_text,
+        parse_mode=ParseMode.HTML
+    )
 
 @app.on_message(filters.text & filters.reply)
 async def handle_number_reply(client, message: Message):
@@ -205,28 +236,36 @@ async def handle_number_reply(client, message: Message):
     if user_id not in movie_options:
         return
     if not message.text.isdigit():
-        return await message.reply("Please reply with a valid number.")
+        return await message.reply(
+            "Please reply with a valid number.",
+            parse_mode=ParseMode.HTML
+        )
 
     choice = int(message.text)
     opts, link, team = movie_options[user_id]['options'], movie_options[user_id]['link'], movie_options[user_id]['team']
 
     if choice < 1 or choice > len(opts):
-        return await message.reply("Invalid choice.")
+        return await message.reply(
+            "Invalid choice.",
+            parse_mode=ParseMode.HTML
+        )
 
     m = opts[choice - 1]
     caption = (
-        f"🎬 **{m['title']}**\n"
-        f"📅 Released: **{m['date']}**\n\n"
-        f"📺 Watch in: `Hindi` | `English` | `Tamil` | `Telugu`\n\n"
+        f"<b>🎬 {m['title']}</b>\n"
+        f"📅 Released: <b>{m['date']}</b>\n\n"
+        f"📺 Watch in: Hindi | English | Tamil | Telugu\n\n"
         f"🔗 Select Quality:\n"
-        f"▪️ 480p: [Click Here]({link})\n"
-        f"▪️ 720p: [Click Here]({link})\n"
-        f"▪️ 1080p: [Click Here]({link})\n\n"
+        f"<a href=\"{link}\">480p</a> | <a href=\"{link}\">720p</a> | <a href=\"{link}\">1080p</a>\n\n"
         f"🔔 Stay Updated with {team}"
     )
-    await client.send_photo(message.chat.id, m['poster_url'], caption=caption, parse_mode="markdown")
-    movie_options.pop(user_id, None)
-    link_flow_state.pop(user_id, None)
+    await client.send_photo(
+        message.chat.id,
+        m['poster_url'],
+        caption=caption,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
+    )
 
 if __name__ == "__main__":
     app.run()
