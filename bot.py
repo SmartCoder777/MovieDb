@@ -54,6 +54,7 @@ def discover_movies_window(start_date, end_date):
         logger.error(f"Discover error: {e}")
     return results
 
+
 def tmdb_trending_india():
     endpoint = "https://api.themoviedb.org/3/trending/all/week"
     params = {"api_key": TMDB_API_KEY}
@@ -85,19 +86,15 @@ async def start(client, message):
             InlineKeyboardButton("🔥 Latest", callback_data="latest_menu"),
             InlineKeyboardButton("🎬 Upcoming", callback_data="upcoming_menu")
         ],
-        [
-            InlineKeyboardButton("📈 Trending", callback_data="trending_now")
-        ],
-        [
-            InlineKeyboardButton("🎞️ Movie Link Uploader", callback_data="movie_link_start")
-        ]
+        [InlineKeyboardButton("📈 Trending", callback_data="trending_now")],
+        [InlineKeyboardButton("🎞️ Movie Link Uploader", callback_data="movie_link_start")]
     ])
-    await message.reply("""
-👋 Welcome to **MovieBot** 🎥
-
-Get the latest and trending **Hindi** movie details, or upload links with style!
-Choose an option below to begin:
-""", reply_markup=kb)
+    await message.reply(
+        "👋 Welcome to **MovieBot** 🎥\n"
+        "\nGet the latest and trending **Hindi** movie details, or upload links with style!"
+        "\nChoose an option below to begin:",
+        reply_markup=kb
+    )
 
 # -------------------- Callback Handlers --------------------
 
@@ -106,7 +103,7 @@ async def callback_handler(client, query: CallbackQuery):
     data = query.data
     user_id = query.from_user.id
 
-    if data.startswith("latest_menu"):
+    if data == "latest_menu":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("1 Day", callback_data="latest_1"), InlineKeyboardButton("2 Days", callback_data="latest_2")],
             [InlineKeyboardButton("10 Days", callback_data="latest_10")]
@@ -119,14 +116,13 @@ async def callback_handler(client, query: CallbackQuery):
         start = today - timedelta(days=days - 1)
         movies = discover_movies_window(start, today)
         if not movies:
-            await query.message.edit_text("No Hindi titles found.")
-            return
+            return await query.message.edit_text("No Hindi titles found.")
         text = f"🔥 Hindi releases in the last {days} day(s):\n\n"
         for idx, m in enumerate(movies, 1):
             text += f"{idx}. 🎬 {m['title']} ({m['date']})\n"
         await query.message.edit_text(text)
 
-    elif data.startswith("upcoming_menu"):
+    elif data == "upcoming_menu":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("1 Day", callback_data="upcoming_1"), InlineKeyboardButton("2 Days", callback_data="upcoming_2")],
             [InlineKeyboardButton("10 Days", callback_data="upcoming_10")]
@@ -139,8 +135,7 @@ async def callback_handler(client, query: CallbackQuery):
         end = today + timedelta(days=days)
         upcoming = discover_movies_window(today, end)
         if not upcoming:
-            await query.message.edit_text("No upcoming Hindi titles found.")
-            return
+            return await query.message.edit_text("No upcoming Hindi titles found.")
         text = f"🎬 Upcoming Hindi titles in the next {days} day(s):\n\n"
         for idx, m in enumerate(upcoming, 1):
             text += f"{idx}. 🎥 {m['title']} ({m['date']})\n"
@@ -149,8 +144,7 @@ async def callback_handler(client, query: CallbackQuery):
     elif data == "trending_now":
         trends = tmdb_trending_india()
         if not trends:
-            await query.message.edit_text("No trending content found.")
-            return
+            return await query.message.edit_text("No trending content found.")
         text = f"📈 Trending Hindi Movies/Shows (This Week):\n\n"
         for idx, t in enumerate(trends, 1):
             text += f"{idx}. 📺 {t['title']} ({t['date']})\n"
@@ -171,7 +165,7 @@ async def callback_handler(client, query: CallbackQuery):
 
 # -------------------- Handle User Text --------------------
 
-@app.on_message(filters.text & ~filters.command)
+@app.on_message(filters.text & ~filters.regex(r"^/"))
 async def handle_movie_input(client, message: Message):
     user_id = message.from_user.id
     if user_id not in link_flow_state or "team" not in link_flow_state[user_id]:
@@ -200,7 +194,9 @@ async def handle_movie_input(client, message: Message):
         return await message.reply("No recent movie found with that name.")
 
     movie_options[user_id] = {"options": options, "link": link, "team": link_flow_state[user_id]["team"]}
-    text = "Select the movie you meant by replying with its number:\n\n"
+    text = "Select the movie you meant by replying with its number:
+
+"
     for i, m in enumerate(options, 1):
         text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
     await message.reply(text)
