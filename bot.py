@@ -26,6 +26,7 @@ app = Client(
     bot_token=BOT_TOKEN
 )
 
+# Per-user state
 movie_options = {}
 link_flow_state = {}
 
@@ -83,7 +84,7 @@ def tmdb_trending_india():
         logger.error(f"Trending error: {e}")
         return []
 
-# -------------------- Start + Buttons --------------------
+# -------------------- /start --------------------
 
 @app.on_message(filters.command("start"))
 async def start(client, message: Message):
@@ -101,160 +102,153 @@ async def start(client, message: Message):
         parse_mode=ParseMode.HTML
     )
 
-# -------------------- Callback Handlers --------------------
+# -------------------- Callbacks --------------------
 
 @app.on_callback_query()
 async def callback_handler(client, query: CallbackQuery):
     data = query.data
-    user_id = query.from_user.id
+    uid = query.from_user.id
 
+    # Latest
     if data == "latest_menu":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("1 Day", callback_data="latest_1"),
              InlineKeyboardButton("2 Days", callback_data="latest_2")],
             [InlineKeyboardButton("10 Days", callback_data="latest_10")]
         ])
-        await query.message.edit_text(
+        return await query.message.edit_text(
             "Choose how many days of latest Hindi releases to view:",
-            reply_markup=kb,
-            parse_mode=ParseMode.HTML
+            reply_markup=kb, parse_mode=ParseMode.HTML
         )
-
-    elif data.startswith("latest_"):
+    if data.startswith("latest_"):
         days = int(data.split("_")[1])
         today = datetime.utcnow().date()
-        start_date = today - timedelta(days=days - 1)
-        movies = discover_movies_window(start_date, today)
+        movies = discover_movies_window(today - timedelta(days=days-1), today)
+        text = "🔥 Releases last {} days:\n\n".format(days)
         if not movies:
-            return await query.message.edit_text("No Hindi titles found.", parse_mode=ParseMode.HTML)
-        text = f"🔥 Hindi releases in the last {days} day(s):\n\n"
-        for idx, m in enumerate(movies, 1):
-            text += f"{idx}. 🎬 {m['title']} ({m['date']})\n"
-        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+            text = "No Hindi titles found."
+        else:
+            text += "\n".join(f"{i}. 🎬 {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
-    elif data == "upcoming_menu":
+    # Upcoming
+    if data == "upcoming_menu":
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("1 Day", callback_data="upcoming_1"),
              InlineKeyboardButton("2 Days", callback_data="upcoming_2")],
             [InlineKeyboardButton("10 Days", callback_data="upcoming_10")]
         ])
-        await query.message.edit_text(
+        return await query.message.edit_text(
             "Choose how many days of upcoming Hindi releases to view:",
-            reply_markup=kb,
-            parse_mode=ParseMode.HTML
+            reply_markup=kb, parse_mode=ParseMode.HTML
         )
-
-    elif data.startswith("upcoming_"):
+    if data.startswith("upcoming_"):
         days = int(data.split("_")[1])
         today = datetime.utcnow().date()
-        end_date = today + timedelta(days=days)
-        upcoming = discover_movies_window(today, end_date)
-        if not upcoming:
-            return await query.message.edit_text("No upcoming Hindi titles found.", parse_mode=ParseMode.HTML)
-        text = f"🎬 Upcoming Hindi titles in the next {days} day(s):\n\n"
-        for idx, m in enumerate(upcoming, 1):
-            text += f"{idx}. 🎥 {m['title']} ({m['date']})\n"
-        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+        movies = discover_movies_window(today, today+timedelta(days=days))
+        text = "🎬 Upcoming next {} days:\n\n".format(days)
+        if not movies:
+            text = "No upcoming Hindi titles found."
+        else:
+            text += "\n".join(f"{i}. 🎥 {m['title']} ({m['date']})" for i,m in enumerate(movies,1))
+        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
-    elif data == "trending_now":
+    # Trending
+    if data == "trending_now":
         trends = tmdb_trending_india()
+        text = "📈 Trending this week:\n\n"
         if not trends:
-            return await query.message.edit_text("No trending content found.", parse_mode=ParseMode.HTML)
-        text = f"📈 Trending Hindi Movies/Shows (This Week):\n\n"
-        for idx, t in enumerate(trends, 1):
-            text += f"{idx}. 📺 {t['title']} ({t['date']})\n"
-        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+            text = "No trending content found."
+        else:
+            text += "\n".join(f"{i}. 📺 {t['title']} ({t['date']})" for i,t in enumerate(trends,1))
+        return await query.message.edit_text(text, parse_mode=ParseMode.HTML)
 
-    elif data == "movie_link_start":
-        link_flow_state[user_id] = {}
+    # Movie Link Uploader
+    if data == "movie_link_start":
+        link_flow_state[uid] = {}
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("@Team_HDT", callback_data="set_team_team_hdt"),
              InlineKeyboardButton("@ORGSupport", callback_data="set_team_orgsupport")]
         ])
-        await query.message.edit_text(
-            "Choose your team for movie link branding:",
-            reply_markup=kb,
+        return await query.message.edit_text(
+            "Choose your team handle:", reply_markup=kb, parse_mode=ParseMode.HTML
+        )
+    if data.startswith("set_team_"):
+        handle = "@" + data.split("_")[-1]
+        link_flow_state[uid]["team"] = handle
+        # Clear any previous options
+        movie_options.pop(uid, None)
+        return await query.message.edit_text(
+            "Great! Now send me your movie name and link in one message.",
             parse_mode=ParseMode.HTML
         )
 
-    elif data.startswith("set_team_"):
-        team = "@" + data.split("_")[-1]
-        link_flow_state[user_id]["team"] = team
-        await query.message.edit_text(
-            "Now send the movie name and any link in the same message:",
-            parse_mode=ParseMode.HTML
-        )
-
-# -------------------- Handle User Input --------------------
-
+# -------------------- Movie Input --------------------
 @app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
 async def handle_movie_input(client, message: Message):
-    user_id = message.from_user.id
+    uid = message.from_user.id
+    # Only accept movie+link if user has chosen a team and has no pending options
+    if uid not in link_flow_state or uid in movie_options:
+        return
     text = message.text.strip()
-    # If user has pending options and sent just a number, skip link parser
-    if text.isdigit() and user_id in movie_options:
-        return
-    if user_id not in link_flow_state or "team" not in link_flow_state[user_id]:
-        return
+    match = re.search(r"https?://\S+", text)
+    if not match:
+        return await message.reply("<b>Please send both movie name and link.</b>", parse_mode=ParseMode.HTML)
 
-    link_match = re.search(r"https?://\S+", text)
-    if not link_match:
-        return await message.reply(
-            "Please include a valid link with the movie name.",
-            parse_mode=ParseMode.HTML
-        )
+    link = match.group(0)
+    name = re.sub(r"https?://\S+", "", text).strip()
+    resp = requests.get(
+        f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={name}", timeout=10
+    ).json()
+    opts = [m for m in resp.get("results", []) if m.get("poster_path")
+            and m.get("release_date", "").startswith(("2021","2022","2023","2024","2025"))]
+    if not opts:
+        return await message.reply("<b>No matches found.</b>", parse_mode=ParseMode.HTML)
 
-    link = link_match.group(0)
-    movie_name = re.sub(r"https?://\S+", "", text).strip()
+    # Save options and original link + team
+    movie_options[uid] = {
+        "opts": opts[:5],  # limit to first 5
+        "link": link,
+        "team": link_flow_state[uid]["team"]
+    }
+    reply = "<b>Select a movie by number:</b>\n\n"
+    for i, m in enumerate(movie_options[uid]["opts"], 1):
+        title = m.get("title")
+        date = m.get("release_date")
+        reply += f"{i}. 🎬 {title} ({date})\n"
+    await message.reply(reply, parse_mode=ParseMode.HTML)
 
-    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={movie_name}"
-    resp = requests.get(url, timeout=10).json()
-    options = []
-    for m in resp.get("results", []):
-        date = m.get("release_date", "")
-        if date and int(date.split("-")[0]) >= 2021 and m.get("poster_path"):
-            options.append({"title": m.get("title"), "date": date, "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}"})
-    if not options:
-        return await message.reply(
-            "No recent movie found with that name.",
-            parse_mode=ParseMode.HTML
-        )
-
-    movie_options[user_id] = {"options": options, "link": link, "team": link_flow_state[user_id]["team"]}
-    response_text = "Select the movie you meant by replying with its number:\n\n"
-    for i, m in enumerate(options, 1):
-        response_text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
-    await message.reply(response_text, parse_mode=ParseMode.HTML)
-
-@app.on_message(filters.regex(r"^\d+$") & ~filters.regex(r"^/"))
+# -------------------- Number Reply --------------------
+@app.on_message(filters.regex(r"^\d+$"))
 async def handle_number_reply(client, message: Message):
-    user_id = message.from_user.id
-    if user_id not in movie_options:
+    uid = message.from_user.id
+    if uid not in movie_options:
         return
     choice = int(message.text)
-    opts, link, team = movie_options[user_id]['options'], movie_options[user_id]['link'], movie_options[user_id]['team']
-    if choice < 1 or choice > len(opts):
-        return await message.reply("Invalid choice.", parse_mode=ParseMode.HTML)
+    data = movie_options[uid]
+    if choice < 1 or choice > len(data["opts"]):
+        return await message.reply("<b>Invalid choice.</b>", parse_mode=ParseMode.HTML)
 
-    m = opts[choice - 1]
+    m = data["opts"][choice-1]
+    link = data["link"]
+    team = data["team"]
+    img = m.get("poster_path")
+    img_url = f"https://image.tmdb.org/t/p/w500{img}" if img else None
     caption = (
         f"<b>🎬 {m['title']}</b>\n"
-        f"📅 Released: <b>{m['date']}</b>\n\n"
-        f"📺 Watch in: Hindi | English | Tamil | Telugu\n\n"
-        f"🔗 Select Quality:\n"
-        f"<a href=\"{link}\">480p</a> | <a href=\"{link}\">720p</a> | <a href=\"{link}\">1080p</a>\n\n"
-        f"🔔 Stay Updated with {team}"
+        f"📅 Released: <b>{m['release_date']}</b>\n\n"
+        f"🔗 <a href=\"{link}\">480p</a> | <a href=\"{link}\">720p</a> | <a href=\"{link}\">1080p</a>\n\n"
+        f"🔔 Stay Updated: {team}"
     )
     await client.send_photo(
-        message.chat.id,
-        m['poster_url'],
+        message.chat.id, img_url,
         caption=caption,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True
     )
-    # Clear state
-    movie_options.pop(user_id, None)
-    link_flow_state.pop(user_id, None)
+    # reset state
+    movie_options.pop(uid, None)
+    link_flow_state.pop(uid, None)
 
 if __name__ == "__main__":
     app.run()
