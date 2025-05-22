@@ -185,15 +185,18 @@ async def callback_handler(client, query: CallbackQuery):
             parse_mode=ParseMode.HTML
         )
 
-# -------------------- Handle User Text --------------------
+# -------------------- Handle User Input --------------------
 
-@app.on_message(filters.text & ~filters.regex(r"^/"))
+@app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
 async def handle_movie_input(client, message: Message):
     user_id = message.from_user.id
+    text = message.text.strip()
+    # If user has pending options and sent just a number, skip link parser
+    if text.isdigit() and user_id in movie_options:
+        return
     if user_id not in link_flow_state or "team" not in link_flow_state[user_id]:
         return
 
-    text = message.text.strip()
     link_match = re.search(r"https?://\S+", text)
     if not link_match:
         return await message.reply(
@@ -210,11 +213,7 @@ async def handle_movie_input(client, message: Message):
     for m in resp.get("results", []):
         date = m.get("release_date", "")
         if date and int(date.split("-")[0]) >= 2021 and m.get("poster_path"):
-            options.append({
-                "title": m.get("title"),
-                "date": date,
-                "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}"
-            })
+            options.append({"title": m.get("title"), "date": date, "poster_url": f"https://image.tmdb.org/t/p/w500{m['poster_path']}"})
     if not options:
         return await message.reply(
             "No recent movie found with that name.",
@@ -225,30 +224,17 @@ async def handle_movie_input(client, message: Message):
     response_text = "Select the movie you meant by replying with its number:\n\n"
     for i, m in enumerate(options, 1):
         response_text += f"{i}. 🎬 {m['title']} ({m['date']})\n"
-    await message.reply(
-        response_text,
-        parse_mode=ParseMode.HTML
-    )
+    await message.reply(response_text, parse_mode=ParseMode.HTML)
 
-@app.on_message(filters.text & filters.reply)
+@app.on_message(filters.regex(r"^\d+$") & ~filters.regex(r"^/"))
 async def handle_number_reply(client, message: Message):
     user_id = message.from_user.id
     if user_id not in movie_options:
         return
-    if not message.text.isdigit():
-        return await message.reply(
-            "Please reply with a valid number.",
-            parse_mode=ParseMode.HTML
-        )
-
     choice = int(message.text)
     opts, link, team = movie_options[user_id]['options'], movie_options[user_id]['link'], movie_options[user_id]['team']
-
     if choice < 1 or choice > len(opts):
-        return await message.reply(
-            "Invalid choice.",
-            parse_mode=ParseMode.HTML
-        )
+        return await message.reply("Invalid choice.", parse_mode=ParseMode.HTML)
 
     m = opts[choice - 1]
     caption = (
@@ -266,6 +252,9 @@ async def handle_number_reply(client, message: Message):
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True
     )
+    # Clear state
+    movie_options.pop(user_id, None)
+    link_flow_state.pop(user_id, None)
 
 if __name__ == "__main__":
     app.run()
