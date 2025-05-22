@@ -194,7 +194,7 @@ async def handle_movie_input(client, message: Message):
         return await message.reply("No recent movie found with that name.")
 
     movie_options[user_id] = {"options": options, "link": link, "team": link_flow_state[user_id]["team"]}
-    text = "Select the movie you meant by replying with its number:
+    text = "Select the movie you meant by replying with its number:\n\n"
 
 "
     for i, m in enumerate(options, 1):
