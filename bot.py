@@ -30,6 +30,7 @@ app = Client(
 # Per-user state
 movie_options = {}
 link_flow_state = {}
+movie_detail_state = {}
 
 # -------------------- TMDB Functions --------------------
 
@@ -92,11 +93,12 @@ async def start(client, message: Message):
         [InlineKeyboardButton("🔥 Latest", callback_data="latest_menu"),
          InlineKeyboardButton("🎬 Upcoming", callback_data="upcoming_menu")],
         [InlineKeyboardButton("📈 Trending", callback_data="trending_now")],
-        [InlineKeyboardButton("🎞️ Movie Link Uploader", callback_data="movie_link_start")]
+        [InlineKeyboardButton("🎞️ Uploader", callback_data="movie_link_start")],
+        [InlineKeyboardButton("🎥 Details", callback_data="movie_details")]
     ])
     await message.reply(
         "👋 <b>Welcome to MovieBot</b> 🎥\n"
-        "Get the latest & trending Hindi movies or share links in style!",
+        "Get the latest, upcoming, trending Hindi movies, share links, or get details!",
         reply_markup=kb,
         parse_mode=ParseMode.HTML
     )
@@ -170,6 +172,12 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.reply("🎞️ Choose your team handle:", reply_markup=kb, parse_mode=ParseMode.HTML)
         return
 
+    # Movie Details flow
+    if data == "movie_details":
+        movie_detail_state[uid] = True
+        await query.message.reply("🔍 Send me the movie name for details:", parse_mode=ParseMode.HTML)
+        return
+
     if data in ("team_hdt", "team_org"):
         team = "@Team_HDT" if data == "team_hdt" else "@ORGSupport"
         link_flow_state[uid]["team"] = team
@@ -179,11 +187,42 @@ async def callback_handler(client, query: CallbackQuery):
 
 # -------------------- Handle Movie Entry --------------------
 @app.on_message(filters.text & ~filters.regex(r"^/") & ~filters.reply)
-async def handle_movie_entry(client, message: Message):
+async def handle_text(client, message: Message):
     uid = message.from_user.id
+    text = message.text.strip()
+
+    # Movie Details handler
+    if uid in movie_detail_state:
+        # search movie
+        resp = requests.get(f"https://api.themoviedb.org/3/search/movie", params={"api_key": TMDB_API_KEY, "query": text}, timeout=10).json()
+        results = resp.get("results", [])
+        if not results:
+            await message.reply("❌ No matches found. Try another title.", parse_mode=ParseMode.HTML)
+        else:
+            movie = results[0]
+            # fetch details
+            mid = movie["id"]
+            detail = requests.get(f"https://api.themoviedb.org/3/movie/{mid}", params={"api_key": TMDB_API_KEY, "language": "en-US"}, timeout=10).json()
+            title = detail.get("title")
+            year = detail.get("release_date", "").split("-")[0]
+            rating = detail.get("vote_average")
+            genres = ", ".join(g["name"] for g in detail.get("genres", []))
+            lang = ", ".join(detail.get("spoken_languages", [{}])[0].get("english_name", detail.get("original_language", "")))
+            overview = detail.get("overview", "No overview available.")
+            text = (
+                f"🎥 <b>{title}</b> ({year})\n"
+                f"⭐ Rating: <i>{rating}</i>/10\n"
+                f"🗂️ Genres: <i>{genres}</i>\n"
+                f"🌐 Language: <i>{lang}</i>\n\n"
+                f"{overview[:300]}{'...' if len(overview)>300 else ''}"
+            )
+            await message.reply(text, parse_mode=ParseMode.HTML)
+        movie_detail_state.pop(uid, None)
+        return
+
+    # existing Movie Link workflow
     if uid not in link_flow_state or uid in movie_options:
         return
-    text = message.text
     m = re.search(r"https?://\S+", text)
     if not m:
         await message.reply("⚠️ <b>Please include both name and link.</b>", parse_mode=ParseMode.HTML)
